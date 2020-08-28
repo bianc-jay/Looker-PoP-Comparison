@@ -9,15 +9,11 @@ view: _pop_compare {
   derived_table: {
     sql:
       SELECT
-        period_num
+        periods.period_num
         ,anchor_segment
-      FROM UNNEST(GENERATE_ARRAY(0,{% parameter num_comparison_periods %})) as period_num
+      FROM (select number as period_num from numbers where number <= {% parameter num_comparison_periods %}) as periods
       CROSS JOIN
-        UNNEST(GENERATE_ARRAY(0
-              ,DATETIME_DIFF(DATETIME({% date_end anchor_date_range %})
-                            ,DATETIME({% date_start anchor_date_range %})
-                            ,{% parameter anchor_breakdown_type %}))
-              ) as anchor_segment
+        (select number as anchor_segment from numbers where number <= datediff(${% parameter anchor_breakdown_type %}, ${date_start anchor_date_range %})) as anchors
       ;;
   }
 
@@ -61,6 +57,12 @@ view: _pop_compare {
     label: "4. Number of past periods"
     description: "Choose how many past periods you want to compare the anchor range against."
     default_value: "1"}
+  
+  dimension: anchor_segment_sql {
+    hidden: yes
+    type: string
+    sql: ${TABLE}.anchor_segment ;;
+  }
 
   # Create some helpful values related to the anchor breakdown type (abt)
   # and comparison period type (cpt) fields for later use (see below)
@@ -69,11 +71,10 @@ view: _pop_compare {
     hidden: yes
     sql:
       {% if anchor_date_range._is_filtered %}
-        {% if anchor_breakdown_type._parameter_value == 'YEAR' %} '%Y' --YYYY, e.g. 2019
+        {% if anchor_breakdown_type._parameter_value == 'YEAR' %} 'YYYY' --YYYY, e.g. 2019
         {% elsif anchor_breakdown_type._parameter_value == 'MONTH'
-          OR anchor_breakdown_type._parameter_value == 'QUARTER' %} '%b' --MON YYYY, e.g. JUN 2019
-        {% elsif anchor_breakdown_type._parameter_value == 'HOUR' %} '%m/%d %r' --MM/DD 12hrAM/PM, e.g. 06/12 1:00 PM
-        {% else %} '%D' --MM/DD/YY, e.g. 06/12/19
+          OR anchor_breakdown_type._parameter_value == 'QUARTER' %} 'MON-YYYY' --MON YYYY, e.g. JUN 2019
+        {% else %} 'MM-DD-YYYY' --MM/DD/YY, e.g. 06/12/19
         {% endif %}
       {% else %} NULL
       {% endif %}
@@ -93,19 +94,31 @@ view: _pop_compare {
       {% endif %}
       ;;}
 
+  dimension: break_down_type_sql {
+    type: string
+    hidden: yes
+    sql:
+      {% if anchor_date_range._is_filtered %}
+        {% if anchor_breakdown_type._parameter_value == 'YEAR' %} 'y'
+        {% elsif anchor_breakdown_type._parameter_value == 'MONTH' %} 'mon'
+        {% elsif anchor_breakdown_type._parameter_value == 'QUARTER' %} 'qtr'
+        {% elsif anchor_breakdown_type._parameter_value == 'WEEK' %} 'w'
+        {% else %} 'd'
+        {% endif %}
+      {% else %} NULL
+      {% endif %}
+      ;;}
+
   # Define and then nicely format values included in the anchor range breakdown segments
   # for use on a chart axis. Starting with the filter end date, this produces all the date
   # segments needed in the anchor range, then truncates them off to the desired granularity,
   # then formats them based on the definitions in the abt_format dimension above.
   dimension: anchor_dates_unformatted {
     hidden: yes
-    type: date_raw
+    type: date
     sql:
       {% if anchor_date_range._is_filtered %}
-      DATETIME_TRUNC(DATETIME_ADD(DATETIME({% date_end anchor_date_range %})
-                                  ,INTERVAL -1*${anchor_segment} {% parameter anchor_breakdown_type %}
-                                  )
-                      ,{% parameter anchor_breakdown_type %})
+      DATE_TRUNC(${break_down_type_sql}, DATEADD({% parameter anchor_breakdown_type %}, -1*${anchor_segment}, {% date_end anchor_date_range %}))
       {% else %} NULL
       {% endif %}
       ;;}
@@ -114,7 +127,7 @@ view: _pop_compare {
     order_by_field: anchor_dates_unformatted
     sql:
       {% if anchor_date_range._is_filtered %}
-      FORMAT_DATETIME(${abt_format},${anchor_dates_unformatted})
+      TO_CHAR(${anchor_dates_unformatted},${abt_format})
       {% else %} NULL
       {% endif %}
       ;;}

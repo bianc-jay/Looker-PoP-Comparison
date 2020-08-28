@@ -1,7 +1,7 @@
 # Example Model file. ONLY COPY THE PARTS YOU NEED, i.e. the PoP Compare part of the sql_always_where parameter shown below,
 # and the join shown below with the ${your_table.your_date_field} field replaced with the relevant field from your Explore.
 
-connection: "bigquery"
+connection: "redshift"
 include: "*.view.lkml"
 include: "*.explore.lkml"
 
@@ -28,11 +28,8 @@ explore: sample_explore {
   join: _pop_compare {
     type: left_outer
     relationship: many_to_one
-    sql_on: DATETIME_TRUNC(DATETIME(${your_table.your_date_field}),{% parameter _pop_compare.anchor_breakdown_type %})
-            =DATETIME_TRUNC(DATETIME_ADD(DATETIME_ADD(DATETIME({% date_end _pop_compare.anchor_date_range %})
-                                                      ,INTERVAL -1*${_pop_compare.anchor_segment} {% parameter _pop_compare.anchor_breakdown_type %})
-                                        ,INTERVAL -1*${_pop_compare.period_num} {% parameter _pop_compare.comparison_period_type %})
-                            ,{% parameter _pop_compare.anchor_breakdown_type %})
+    sql_on: DATE_TRUNC('{% parameter _pop_compare.anchor_breakdown_type %}',convert(datetime,${your_date_field}))
+            = DATE_TRUNC('{% parameter _pop_compare.anchor_breakdown_type %}',DATEADD({% parameter _pop_compare.comparison_period_type %}, -1*${_pop_compare.period_num},DATEADD({% parameter _pop_compare.anchor_breakdown_type %},-1*${_pop_compare.anchor_segment_sql},{% date_end _pop_compare.anchor_date_range %})))
             ;;
     } # End join _pop_compare
 
