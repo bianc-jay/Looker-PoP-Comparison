@@ -13,7 +13,7 @@ view: _pop_compare {
         ,anchor_segment
       FROM (select number as period_num from numbers where number <= {% parameter num_comparison_periods %}) as periods
       CROSS JOIN
-        (select number as anchor_segment from numbers where number <= datediff(${% parameter anchor_breakdown_type %}, ${date_start anchor_date_range %})) as anchors
+        (select number as anchor_segment from numbers where number <= datediff({% parameter anchor_breakdown_type %}, ${date_start anchor_date_range %})) as anchors
       ;;
   }
 
